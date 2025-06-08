@@ -41,7 +41,7 @@ app.post("/login", async (req, res) => {
         );
         if (data?.username) {
             const token = jwt.sign(data, secretKey, { expiresIn: "1h" });
-            res.send({ success: true, token });
+            res.send({ success: true, token, data: data });
         } else {
             res.send({ success: false, message: "Tai khoan ko ton tai" });
         }
@@ -52,7 +52,7 @@ app.post("/login", async (req, res) => {
 
 app.post("/signup", async (req, res) => {
     console.log(req.body);
-    const { username, email, password } = req.body;
+    const { username, email, password, role_id } = req.body;
     try {
         const data = await db.oneOrNone(
             "SELECT * FROM appuser WHERE username = $1",
@@ -66,8 +66,8 @@ app.post("/signup", async (req, res) => {
             );
             console.log(result);
             const userCreate = await db.one(
-                "INSERT INTO appuser(user_id, username, email, password) VALUES($1, $2, $3, $4) RETURNING *",
-                [result.max_id + 1, username, email, password]
+                "INSERT INTO appuser(user_id, username, email, password, role_id) VALUES($1, $2, $3, $4, $5) RETURNING *",
+                [result.max_id + 1, username, email, password, role_id]
             );
             res.send({ success: true, message: "Tao tai khoan thanh cong" });
         }
@@ -137,6 +137,85 @@ app.post("/forgot-password-update", async (req, res) => {
     res.send({
         success: true,
         message: "Cap nhat mat khau thanh cong",
+    });
+});
+
+// CRUD course
+
+// create
+app.post("/course", async (req, res) => {
+    const { title, description, teacher_id } = req.body;
+    if (!title || !description || !teacher_id)
+        return res.send({
+            message: "Khong du thong tin",
+            success: false,
+        });
+    const course = await db.one(
+        "INSERT INTO course(title, description, teacher_id) VALUES($1, $2, $3) RETURNING *",
+        [title, description, teacher_id]
+    );
+
+    res.send({
+        success: true,
+        message: "Them moi thanh cong",
+        data: course,
+    });
+});
+
+// read
+app.get("/course", async (req, res) => {
+    const course = await db.any("SELECT * FROM course");
+
+    res.send({
+        success: true,
+        data: course,
+    });
+});
+
+// get detail
+app.get("/course/:id", async (req, res) => {
+    const { id } = req.params;
+    const course = await db.oneOrNone(
+        "SELECT * FROM course WHERE course_id = $1",
+        [id]
+    );
+
+    res.send({
+        success: true,
+        data: course,
+    });
+});
+
+// update
+app.patch("/course/:id", async (req, res) => {
+    const { id } = req.params;
+    const { title, description } = req.body;
+    if (!title || !description)
+        return res.send({
+            message: "Khong du thong tin",
+            success: false,
+        });
+    const updateCourse = await db.oneOrNone(
+        "UPDATE course SET title = $1, description = $2 WHERE course_id = $3 RETURNING *",
+        [title, description, id]
+    );
+
+    res.send({
+        success: true,
+        data: updateCourse,
+    });
+});
+
+// delete
+app.delete("/course/:id", async (req, res) => {
+    const { id } = req.params;
+    const deletedCourse = await db.oneOrNone(
+        "DELETE FROM course WHERE course_id = $1 RETURNING *",
+        [id]
+    );
+    res.send({
+        success: true,
+        data: deletedCourse,
     });
 });
 
