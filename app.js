@@ -2,6 +2,7 @@ const express = require("express");
 const nodemailer = require("nodemailer");
 const jwt = require("jsonwebtoken");
 const pgp = require("pg-promise")(/* options */);
+const cors = require('cors');
 const db = pgp("postgres://postgres:Minh0705@127.0.0.1:5432/online_learning");
 const app = express();
 const port = 3000;
@@ -20,6 +21,11 @@ app.use(function (req, res, next) {
     );
     next();
 });
+
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+}));
 
 app.get("/", (req, res) => {
     res.send("Hello World");
@@ -164,7 +170,19 @@ app.post("/course", async (req, res) => {
 
 // read
 app.get("/course", async (req, res) => {
-    const course = await db.any("SELECT * FROM course");
+    const { teacher_id } = req.query;
+
+    if (!teacher_id) {
+        return res.send({
+            success: false,
+            message: "Missing teacher_id",
+        });
+    }
+
+    const course = await db.any(
+        "SELECT * FROM course WHERE teacher_id = $1",
+        [teacher_id]
+    );
 
     res.send({
         success: true,
