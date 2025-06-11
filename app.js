@@ -175,7 +175,7 @@ app.get("/course", async (req, res) => {
     if (!teacher_id) {
         return res.send({
             success: false,
-            message: "Missing teacher_id",
+            message: "Khong ro Giao vien",
         });
     }
 
@@ -234,6 +234,104 @@ app.delete("/course/:id", async (req, res) => {
     res.send({
         success: true,
         data: deletedCourse,
+    });
+});
+
+//API about Student
+
+// GET /courses : Lấy tất cả các course
+app.get("/courses", async (req, res) => {
+    console.log('>>> [GET /courses]');
+    const courses = await db.any("SELECT * FROM course");
+    res.send({
+        success: true,
+        data: courses,
+    });
+});
+
+// GET /my-courses?email=xxx : Xử lý Course theo người dùngdùng
+app.get("/my-courses", async (req, res) => {
+    const { email } = req.query;
+
+    console.log(`>>> [GET /my-courses] email: ${email}`);
+
+    if (!email) {
+        return res.send({
+            success: false,
+            message: "Email ko co",
+        });
+    }
+
+    const user = await db.oneOrNone("SELECT user_id FROM appuser WHERE email = $1", [email]);
+    if (!user) {
+        return res.send({
+            success: false,
+            message: "Nguoi dung ko ton tai",
+        });
+    }
+
+    const enrollments = await db.any(
+        "SELECT course_id FROM course_enrollment WHERE user_id = $1",
+        [user.user_id]
+    );
+
+    const courseIds = enrollments.map(e => e.course_id);
+
+    console.log(`>>> [GET /my-courses] user_id: ${user.user_id}, courses:`, courseIds);
+
+    res.send({
+        success: true,
+        data: courseIds,
+    });
+});
+
+// POST /book-course
+app.post("/book-course", async (req, res) => {
+    const { email, courseId } = req.body;
+
+    console.log(`>>> [POST /book-course] email: ${email}, courseId: ${courseId}`);
+
+    if (!email || !courseId) {
+        return res.send({
+            success: false,
+            message: "Khong co Email hoac Course",
+        });
+    }
+
+    const user = await db.oneOrNone("SELECT user_id FROM appuser WHERE email = $1", [email]);
+    if (!user) {
+        return res.send({
+            success: false,
+            message: "User ko ton tai",
+        });
+    }
+
+    // Kiem tra neu da ghi danh roiroi
+    const existing = await db.oneOrNone(
+        "SELECT * FROM course_enrollment WHERE user_id = $1 AND course_id = $2",
+        [user.user_id, courseId]
+    );
+
+    if (existing) {
+        console.log(`>>> [POST /book-course] Already enrolled! user_id: ${user.user_id}, course_id: ${courseId}`);
+        return res.send({
+            success: false,
+            message: "Da ghi danh roi",
+        });
+    }
+
+    // Insert enrollment
+    const enrollment = await db.one(
+        "INSERT INTO course_enrollment(user_id, course_id) VALUES($1, $2) RETURNING *",
+        [user.user_id, courseId]
+    );
+
+    console.log(`>>> [POST /book-course] Enrollment created:`, enrollment);
+
+    res.send({
+        success: true,
+        message: "Ghi danh thanh cong",
+        data: enrollment,
     });
 });
 
