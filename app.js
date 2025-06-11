@@ -271,7 +271,7 @@ app.get("/my-courses", async (req, res) => {
     }
 
     const enrollments = await db.any(
-        "SELECT course_id FROM course_enrollment WHERE user_id = $1",
+        "SELECT course_id FROM courseenrollment WHERE user_id = $1",
         [user.user_id]
     );
 
@@ -308,7 +308,7 @@ app.post("/book-course", async (req, res) => {
 
     // Kiem tra neu da ghi danh roiroi
     const existing = await db.oneOrNone(
-        "SELECT * FROM course_enrollment WHERE user_id = $1 AND course_id = $2",
+        "SELECT * FROM courseenrollment WHERE user_id = $1 AND course_id = $2",
         [user.user_id, courseId]
     );
 
@@ -322,7 +322,7 @@ app.post("/book-course", async (req, res) => {
 
     // Insert enrollment
     const enrollment = await db.one(
-        "INSERT INTO course_enrollment(user_id, course_id) VALUES($1, $2) RETURNING *",
+        "INSERT INTO courseenrollment(user_id, course_id) VALUES($1, $2) RETURNING *",
         [user.user_id, courseId]
     );
 
