@@ -82,11 +82,10 @@ app.post("/signup", async (req, res) => {
     }
 });
 
-// Create a test account or replace with real credentials.
 const transporter = nodemailer.createTransport({
     service: "gmail",
     host: "smtp.gmail.com",
-    secure: false, // true for 465, false for other ports
+    secure: false,
     auth: {
         user: "chuanhminh2004@gmail.com",
         pass: "lmfo uksk sjbi jkdh",
@@ -144,6 +143,17 @@ app.post("/forgot-password-update", async (req, res) => {
         success: true,
         message: "Cap nhat mat khau thanh cong",
     });
+});
+
+app.get("/user/:id", async (req, res) => {
+    const { id } = req.params;
+    try {
+        const user = await db.oneOrNone("SELECT * FROM appuser WHERE user_id = $1", [id]);
+        res.send({ success: true, data: user });
+    } catch (err) {
+        console.log(err);
+        res.send({ success: false, message: "Không tìm thấy user!" });
+    }
 });
 
 // CRUD course
@@ -239,7 +249,7 @@ app.delete("/course/:id", async (req, res) => {
 
 //API about Student
 
-// GET /courses : Lấy tất cả các course
+//Lấy tất cả các course
 app.get("/courses", async (req, res) => {
     console.log('>>> [GET /courses]');
     const courses = await db.any("SELECT * FROM course");
@@ -249,7 +259,7 @@ app.get("/courses", async (req, res) => {
     });
 });
 
-// GET /my-courses?email=xxx : Xử lý Course theo người dùngdùng
+//Xử lý Course theo người dùng
 app.get("/my-courses", async (req, res) => {
     const { email } = req.query;
 
@@ -306,7 +316,7 @@ app.post("/book-course", async (req, res) => {
         });
     }
 
-    // Kiem tra neu da ghi danh roiroi
+    // Kiem tra neu da ghi danh roi
     const existing = await db.oneOrNone(
         "SELECT * FROM courseenrollment WHERE user_id = $1 AND course_id = $2",
         [user.user_id, courseId]
@@ -333,6 +343,157 @@ app.post("/book-course", async (req, res) => {
         message: "Ghi danh thanh cong",
         data: enrollment,
     });
+});
+
+// CREATE chapter
+app.post("/chapter", async (req, res) => {
+    const { title, course_id } = req.body;
+    if (!title || !course_id)
+        return res.send({ success: false, message: "Thiếu thông tin" });
+
+    try {
+        const chapter = await db.one(
+            "INSERT INTO chapter(title, course_id) VALUES($1, $2) RETURNING *",
+            [title, course_id]
+        );
+        res.send({ success: true, data: chapter });
+    } catch (err) {
+        console.log(err);
+        res.send({ success: false, message: "Tạo chương thất bại" });
+    }
+});
+
+app.get("/chapter", async (req, res) => {
+    const { course_id } = req.query;
+
+    if (!course_id) {
+        return res.send({
+            success: false,
+            message: "Khong co course",
+        });
+    }
+
+    const chapter = await db.any(
+        "SELECT * FROM chapter WHERE course_id = $1",
+        [course_id]
+    );
+
+    res.send({
+        success: true,
+        data: chapter,
+    });
+});
+
+// GET chapters by course_id
+app.get("/chapters/:course_id", async (req, res) => {
+    const { course_id } = req.params;
+    try {
+        const chapters = await db.any(
+            "SELECT * FROM chapter WHERE course_id = $1",
+            [course_id]
+        );
+        res.send({ success: true, data: chapters });
+    } catch (err) {
+        console.log(err);
+        res.send({ success: false, message: "Lấy chương thất bại" });
+    }
+});
+
+// UPDATE chapter
+app.patch("/chapter/:id", async (req, res) => {
+    const { id } = req.params;
+    const { title } = req.body;
+    try {
+        const updated = await db.oneOrNone(
+            "UPDATE chapter SET title = $1 WHERE chapter_id = $2 RETURNING *",
+            [title, id]
+        );
+        res.send({ success: true, data: updated });
+    } catch (err) {
+        console.log(err);
+        res.send({ success: false, message: "Cập nhật thất bại" });
+    }
+});
+
+// DELETE chapter
+app.delete("/chapter/:id", async (req, res) => {
+    const { id } = req.params;
+    try {
+        const deleted = await db.oneOrNone(
+            "DELETE FROM chapter WHERE chapter_id = $1 RETURNING *",
+            [id]
+        );
+        res.send({ success: true, data: deleted });
+    } catch (err) {
+        console.log(err);
+        res.send({ success: false, message: "Xoá thất bại" });
+    }
+});
+
+// CREATE lesson
+app.post("/lesson", async (req, res) => {
+    const { title, content, chapter_id, video_url } = req.body;
+    if (!title || !chapter_id)
+        return res.send({ success: false, message: "Thiếu thông tin" });
+
+    try {
+        const lesson = await db.one(
+            `INSERT INTO lesson(title, content, chapter_id, video_url)
+             VALUES($1, $2, $3, $4) RETURNING *`,
+            [title, content || '', chapter_id, video_url || null]
+        );
+        res.send({ success: true, data: lesson });
+    } catch (err) {
+        console.log(err);
+        res.send({ success: false, message: "Tạo bài học thất bại" });
+    }
+});
+
+// GET lessons by chapter_id
+app.get("/lessons/:chapter_id", async (req, res) => {
+    const { chapter_id } = req.params;
+    try {
+        const lessons = await db.any(
+            "SELECT * FROM lesson WHERE chapter_id = $1",
+            [chapter_id]
+        );
+        res.send({ success: true, data: lessons });
+    } catch (err) {
+        console.log(err);
+        res.send({ success: false, message: "Lấy bài học thất bại" });
+    }
+});
+
+// UPDATE lesson
+app.patch("/lesson/:id", async (req, res) => {
+    const { id } = req.params;
+    const { title, content, video_url } = req.body;
+    try {
+        const updated = await db.oneOrNone(
+            `UPDATE lesson SET title = $1, content = $2, video_url = $3
+             WHERE lesson_id = $4 RETURNING *`,
+            [title, content, video_url, id]
+        );
+        res.send({ success: true, data: updated });
+    } catch (err) {
+        console.log(err);
+        res.send({ success: false, message: "Cập nhật bài học thất bại" });
+    }
+});
+
+// DELETE lesson
+app.delete("/lesson/:id", async (req, res) => {
+    const { id } = req.params;
+    try {
+        const deleted = await db.oneOrNone(
+            "DELETE FROM lesson WHERE lesson_id = $1 RETURNING *",
+            [id]
+        );
+        res.send({ success: true, data: deleted });
+    } catch (err) {
+        console.log(err);
+        res.send({ success: false, message: "Xoá bài học thất bại" });
+    }
 });
 
 app.listen(port, () => {
