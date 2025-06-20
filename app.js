@@ -6,6 +6,54 @@ const cors = require('cors');
 const db = pgp("postgres://postgres:Minh0705@127.0.0.1:5432/online_learning");
 const app = express();
 const port = 3000;
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+// Tạo folder nếu chưa có
+const uploadPath = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadPath)) fs.mkdirSync(uploadPath);
+
+const videoPath = path.join(__dirname, 'uploads/videos');
+if (!fs.existsSync(videoPath)) fs.mkdirSync(videoPath);
+
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, 'uploads/');
+    },
+    filename: function (req, file, cb) {
+        const ext = path.extname(file.originalname);
+        cb(null, Date.now() + ext);
+    },
+});
+const upload = multer({ storage });
+
+const videoStorage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, 'uploads/videos/');
+    },
+    filename: function (req, file, cb) {
+        const ext = path.extname(file.originalname);
+        cb(null, Date.now() + ext);
+    },
+});
+
+const uploadVideo = multer({
+    storage: videoStorage,
+    limits: { fileSize: 2000 * 1024 * 1024 },
+    fileFilter: function (req, file, cb) {
+        const ext = path.extname(file.originalname).toLowerCase();
+        if (ext === '.mp4' || ext === '.mov' || ext === '.avi' || ext === '.mkv') {
+            cb(null, true);
+        } else {
+            cb(new Error('Chỉ cho phép định dạng video (.mp4, .mov, .avi, .mkv)'));
+        }
+    }
+});
+
+// Truy cập ảnh qua http://localhost:3000/uploads/filename.jpg
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 
 app.use(express.json());
 
@@ -159,24 +207,33 @@ app.get("/user/:id", async (req, res) => {
 // CRUD course
 
 // create
-app.post("/course", async (req, res) => {
+app.post("/course", upload.single('courseAvatar'), async (req, res) => {
     const { title, description, teacher_id } = req.body;
+    const imgSrc = req.file ? `/uploads/${req.file.filename}` : '';
+
     if (!title || !description || !teacher_id)
         return res.send({
             message: "Khong du thong tin",
             success: false,
         });
-    const course = await db.one(
-        "INSERT INTO course(title, description, teacher_id) VALUES($1, $2, $3) RETURNING *",
-        [title, description, teacher_id]
-    );
 
-    res.send({
-        success: true,
-        message: "Them moi thanh cong",
-        data: course,
-    });
+    try {
+        const course = await db.one(
+            "INSERT INTO course(title, description, teacher_id, course_avatar) VALUES($1, $2, $3, $4) RETURNING *",
+            [title, description, teacher_id, imgSrc]
+        );
+
+        res.send({
+            success: true,
+            message: "Them moi thanh cong",
+            data: course,
+        });
+    } catch (error) {
+        console.log(error);
+        res.send({ success: false, message: "Lỗi tạo khóa học" });
+    }
 });
+
 
 // read
 app.get("/course", async (req, res) => {
@@ -215,24 +272,39 @@ app.get("/course/:id", async (req, res) => {
 });
 
 // update
-app.patch("/course/:id", async (req, res) => {
+app.patch("/course/:id", upload.single('courseAvatar'), async (req, res) => {
     const { id } = req.params;
     const { title, description } = req.body;
-    if (!title || !description)
-        return res.send({
-            message: "Khong du thong tin",
-            success: false,
-        });
-    const updateCourse = await db.oneOrNone(
-        "UPDATE course SET title = $1, description = $2 WHERE course_id = $3 RETURNING *",
-        [title, description, id]
-    );
+    const courseAvatar = req.file ? `/uploads/${req.file.filename}` : null;
 
-    res.send({
-        success: true,
-        data: updateCourse,
-    });
+    if (!title || !description) {
+        return res.send({ success: false, message: "Khong du thong tin" });
+    }
+
+    let query, values;
+    if (courseAvatar) {
+        query = `
+            UPDATE course
+            SET title = $1, description = $2, course_avatar = $3
+            WHERE course_id = $4 RETURNING *`;
+        values = [title, description, courseAvatar, id];
+    } else {
+        query = `
+            UPDATE course
+            SET title = $1, description = $2
+            WHERE course_id = $3 RETURNING *`;
+        values = [title, description, id];
+    }
+
+    try {
+        const updated = await db.one(query, values);
+        res.send({ success: true, data: updated });
+    } catch (err) {
+        console.log(err);
+        res.send({ success: false, message: "Lỗi khi cập nhật khóa học" });
+    }
 });
+
 
 // delete
 app.delete("/course/:id", async (req, res) => {
@@ -495,6 +567,37 @@ app.delete("/lesson/:id", async (req, res) => {
         res.send({ success: false, message: "Xoá bài học thất bại" });
     }
 });
+
+app.post("/upload-video/:lesson_id", uploadVideo.single("video"), async (req, res) => {
+    const { lesson_id } = req.params;
+
+    if (!req.file) {
+        return res.send({ success: false, message: "Không có video nào được tải lên!" });
+    }
+
+    const videoUrl = `/uploads/videos/${req.file.filename}`;
+
+    try {
+        const updated = await db.oneOrNone(
+            "UPDATE lesson SET video_url = $1 WHERE lesson_id = $2 RETURNING *",
+            [videoUrl, lesson_id]
+        );
+
+        if (!updated) {
+            return res.send({ success: false, message: "Không tìm thấy bài học để cập nhật!" });
+        }
+
+        res.send({
+            success: true,
+            message: "Upload và cập nhật bài học thành công!",
+            data: updated
+        });
+    } catch (err) {
+        console.log(err);
+        res.status(500).send({ success: false, message: "Upload video thất bại" });
+    }
+});
+
 
 app.listen(port, () => {
     console.log(`Example app listening on port ${port}`);
